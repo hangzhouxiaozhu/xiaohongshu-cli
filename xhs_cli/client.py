@@ -160,7 +160,8 @@ class XhsClient(
     def _request_with_retry(self, method: str, url: str, **kwargs) -> httpx.Response:
         self._rate_limit_delay()
         last_exc: Exception | None = None
-        attempts = self._max_retries if method.upper() in {"GET", "HEAD", "OPTIONS"} else 1
+        idempotent = method.upper() in {"GET", "HEAD", "OPTIONS", "PUT", "DELETE"}
+        attempts = max(1, self._max_retries) if idempotent else 1
 
         for attempt in range(attempts):
             try:

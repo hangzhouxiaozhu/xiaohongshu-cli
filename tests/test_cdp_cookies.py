@@ -1,63 +1,92 @@
-"""Unit tests for Chrome DevTools Protocol cookie extraction."""
-
-import json
+"""Tests for local Chrome DevTools Protocol cookie extraction."""
 
 import pytest
 
-from xhs_cli.cdp_cookies import _fetch_cookies, extract_cdp_cookies
+from xhs_cli.cdp_cookies import extract_cdp_cookies
 
 
-class _AsyncContext:
-    def __init__(self, value):
-        self.value = value
+class _FakeContext:
+    def __init__(self, cookies):
+        self._cookies = cookies
 
-    async def __aenter__(self):
-        return self.value
+    def cookies(self, urls):
+        assert urls == ["https://www.xiaohongshu.com/"]
+        return self._cookies
 
-    async def __aexit__(self, *args):
+
+class _FakeChromium:
+    def __init__(self, browser):
+        self.browser = browser
+        self.calls = []
+
+    def connect_over_cdp(self, endpoint, timeout):
+        self.calls.append((endpoint, timeout))
+        return self.browser
+
+
+class _FakePlaywrightManager:
+    def __init__(self, chromium):
+        self.playwright = type("Playwright", (), {"chromium": chromium})()
+
+    def __enter__(self):
+        return self.playwright
+
+    def __exit__(self, *args):
         return None
 
 
-class _Response:
-    def raise_for_status(self):
-        return None
-
-    def json(self):
-        return {"webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/browser/test"}
-
-
-class _HttpClient:
-    async def get(self, url, timeout):
-        assert url == "http://127.0.0.1:9222/json/version"
-        assert timeout == 5
-        return _Response()
+def _install_fake_playwright(monkeypatch, contexts):
+    browser = type("Browser", (), {"contexts": contexts})()
+    chromium = _FakeChromium(browser)
+    monkeypatch.setattr(
+        "playwright.sync_api.sync_playwright",
+        lambda: _FakePlaywrightManager(chromium),
+    )
+    return chromium
 
 
-class _WebSocket:
-    async def send(self, payload):
-        assert json.loads(payload) == {"id": 1, "method": "Network.getCookies"}
+def test_extract_cdp_cookies_uses_localhost_and_xhs_domain(monkeypatch):
+    chromium = _install_fake_playwright(monkeypatch, [_FakeContext([
+        {"name": "a1", "value": "valid", "domain": ".xiaohongshu.com"},
+        {"name": "web_session", "value": "session", "domain": "www.xiaohongshu.com"},
+        {"name": "foreign", "value": "secret", "domain": ".example.com"},
+    ])])
 
-    async def recv(self):
-        return json.dumps(
-            {
-                "result": {
-                    "cookies": [
-                        {"name": "a1", "value": "secret", "domain": ".xiaohongshu.com"},
-                        {"name": "other", "value": "ignored", "domain": ".example.com"},
-                    ]
-                }
-            }
-        )
+    assert extract_cdp_cookies(9222) == {"a1": "valid", "web_session": "session"}
+    assert chromium.calls == [("http://127.0.0.1:9222", 5_000)]
 
 
-@pytest.mark.asyncio
-async def test_fetches_only_xiaohongshu_cookies(monkeypatch):
-    monkeypatch.setattr("xhs_cli.cdp_cookies.httpx.AsyncClient", lambda: _AsyncContext(_HttpClient()))
-    monkeypatch.setattr("xhs_cli.cdp_cookies.websockets.connect", lambda *args, **kwargs: _AsyncContext(_WebSocket()))
+def test_extract_cdp_cookies_requires_a1(monkeypatch):
+    _install_fake_playwright(monkeypatch, [_FakeContext([
+        {"name": "web_session", "value": "session", "domain": ".xiaohongshu.com"},
+    ])])
 
-    assert await _fetch_cookies("127.0.0.1", 9222) == {"a1": "secret"}
+    assert extract_cdp_cookies(9222) is None
+
+
+def test_extract_cdp_cookies_does_not_mix_browser_contexts(monkeypatch):
+    _install_fake_playwright(monkeypatch, [
+        _FakeContext([
+            {"name": "a1", "value": "account-a", "domain": ".xiaohongshu.com"},
+            {"name": "web_session", "value": "session-a", "domain": ".xiaohongshu.com"},
+        ]),
+        _FakeContext([
+            {"name": "a1", "value": "account-b", "domain": ".xiaohongshu.com"},
+            {"name": "web_session", "value": "session-b", "domain": ".xiaohongshu.com"},
+        ]),
+    ])
+
+    assert extract_cdp_cookies(9222) == {
+        "a1": "account-a",
+        "web_session": "session-a",
+    }
 
 
 def test_rejects_invalid_port():
     with pytest.raises(ValueError, match="between 1 and 65535"):
         extract_cdp_cookies(0)
+
+
+def test_rejects_remote_host():
+    with pytest.raises(ValueError, match="must be localhost"):
+        extract_cdp_cookies(9222, host="example.com")

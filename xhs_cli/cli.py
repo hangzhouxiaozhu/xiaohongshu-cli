@@ -60,14 +60,14 @@ _fix_windows_encoding()
     "--cdp-port",
     type=click.IntRange(1, 65535),
     default=None,
-    help="Extract cookies from a running Chromium browser via this CDP port (e.g. 9222)",
+    help="Read cookies from a Chromium browser debugging on localhost",
 )
 @click.option(
     "--cdp-host",
-    type=str,
+    type=click.Choice(["127.0.0.1", "localhost"]),
     default="127.0.0.1",
     show_default=True,
-    help="CDP host to connect to (used with --cdp-port)",
+    help="Local CDP host (used with --cdp-port)",
 )
 @click.pass_context
 def cli(ctx, verbose: bool, cookie_source: str, cdp_port: int | None, cdp_host: str):

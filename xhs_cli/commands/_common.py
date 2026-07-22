@@ -31,15 +31,10 @@ def _cookie_source(ctx) -> str:
     return ctx.obj.get("cookie_source", "auto") if ctx.obj else "auto"
 
 
-def _cdp_options(ctx) -> tuple[int | None, str]:
-    if not ctx.obj:
-        return None, "127.0.0.1"
-    return ctx.obj.get("cdp_port"), ctx.obj.get("cdp_host", "127.0.0.1")
-
-
 def get_client(ctx, *, force_refresh: bool = False) -> XhsClient:
     """Get a local client from the click context."""
-    cdp_port, cdp_host = _cdp_options(ctx)
+    cdp_port = ctx.obj.get("cdp_port") if ctx.obj else None
+    cdp_host = ctx.obj.get("cdp_host", "127.0.0.1") if ctx.obj else "127.0.0.1"
     _browser, cookies = get_cookies(
         _cookie_source(ctx),
         force_refresh=force_refresh,
@@ -49,12 +44,19 @@ def get_client(ctx, *, force_refresh: bool = False) -> XhsClient:
     return XhsClient(cookies)
 
 
-def run_client_action(ctx, action: Callable[[XhsClient], T]) -> T:
-    """Run an authenticated client action and retry once with fresh browser cookies."""
+def run_client_action(
+    ctx,
+    action: Callable[[XhsClient], T],
+    *,
+    retry_on_session_expiry: bool = True,
+) -> T:
+    """Run an authenticated action, optionally retrying once with fresh cookies."""
     try:
         with get_client(ctx) as client:
             return action(client)
     except SessionExpiredError as exc:
+        if not retry_on_session_expiry:
+            raise
         try:
             with get_client(ctx, force_refresh=True) as client:
                 return action(client)
@@ -70,12 +72,17 @@ def handle_command(
     as_json: bool,
     as_yaml: bool,
     prefix: str | None = None,
+    retry_on_session_expiry: bool = True,
 ):
     """Run a client action, emit structured output if requested, else render."""
     from ..formatter import maybe_print_structured
 
     try:
-        data = run_client_action(ctx, action)
+        data = run_client_action(
+            ctx,
+            action,
+            retry_on_session_expiry=retry_on_session_expiry,
+        )
         if not maybe_print_structured(data, as_json=as_json, as_yaml=as_yaml) and render:
             render(data)
         return data
