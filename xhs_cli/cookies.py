@@ -479,18 +479,32 @@ def extract_browser_cookies(source: str = "auto") -> tuple[str, dict[str, str]] 
 
 
 def get_cookies(
-    cookie_source: str = "auto", *, force_refresh: bool = False
+    cookie_source: str = "auto",
+    *,
+    force_refresh: bool = False,
+    cdp_port: int | None = None,
+    cdp_host: str = "127.0.0.1",
 ) -> tuple[str, dict[str, str]]:
     """
     Multi-strategy cookie acquisition with TTL-based auto-refresh.
 
     Returns ``(browser_name, cookies)``.
 
-    1. Load saved cookies (skip if stale > 7 days)
-    2. Extract from browser (auto-detect if *cookie_source* is ``"auto"``)
-    3. Raise error if all fail
+    1. Extract via CDP when *cdp_port* is set
+    2. Load saved cookies (skip if stale > 7 days)
+    3. Extract from browser (auto-detect if *cookie_source* is ``"auto"``)
+    4. Raise error if all fail
     """
-    # 1. Try saved cookies first
+    if cdp_port is not None:
+        from .cdp_cookies import extract_cdp_cookies
+
+        cookies = extract_cdp_cookies(cdp_port, host=cdp_host)
+        if cookies:
+            save_cookies(cookies)
+            return f"cdp:{cdp_host}:{cdp_port}", cookies
+        logger.warning("CDP extraction on %s:%d failed; falling back", cdp_host, cdp_port)
+
+    # 2. Try saved cookies first
     if not force_refresh:
         saved = load_saved_cookies()
         if saved:
@@ -510,7 +524,7 @@ def get_cookies(
                 )
             return "saved", saved
 
-    # 2. Try browser extraction
+    # 3. Try browser extraction
     from .exceptions import NoCookieError
 
     result = extract_browser_cookies(cookie_source)

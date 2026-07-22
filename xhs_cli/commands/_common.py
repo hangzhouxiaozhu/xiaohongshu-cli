@@ -31,9 +31,21 @@ def _cookie_source(ctx) -> str:
     return ctx.obj.get("cookie_source", "auto") if ctx.obj else "auto"
 
 
+def _cdp_options(ctx) -> tuple[int | None, str]:
+    if not ctx.obj:
+        return None, "127.0.0.1"
+    return ctx.obj.get("cdp_port"), ctx.obj.get("cdp_host", "127.0.0.1")
+
+
 def get_client(ctx, *, force_refresh: bool = False) -> XhsClient:
     """Get a local client from the click context."""
-    _browser, cookies = get_cookies(_cookie_source(ctx), force_refresh=force_refresh)
+    cdp_port, cdp_host = _cdp_options(ctx)
+    _browser, cookies = get_cookies(
+        _cookie_source(ctx),
+        force_refresh=force_refresh,
+        cdp_port=cdp_port,
+        cdp_host=cdp_host,
+    )
     return XhsClient(cookies)
 
 

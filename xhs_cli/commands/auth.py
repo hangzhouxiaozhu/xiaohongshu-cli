@@ -99,7 +99,14 @@ def login(ctx, cookie_source: str | None, as_json: bool, as_yaml: bool, use_qrco
         cookie_source = ctx.obj.get("cookie_source", "auto") if ctx.obj else "auto"
 
     def _login_with_browser() -> None:
-        browser, cookies = get_cookies(cookie_source, force_refresh=True)
+        cdp_port = ctx.obj.get("cdp_port") if ctx.obj else None
+        cdp_host = ctx.obj.get("cdp_host", "127.0.0.1") if ctx.obj else "127.0.0.1"
+        browser, cookies = get_cookies(
+            cookie_source,
+            force_refresh=True,
+            cdp_port=cdp_port,
+            cdp_host=cdp_host,
+        )
         print_success(f"Cookies extracted from {browser}")
 
         # Verify by fetching user info, retry once if session not yet propagated

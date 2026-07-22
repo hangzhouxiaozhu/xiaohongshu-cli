@@ -60,5 +60,7 @@ class NoCookieError(XhsApiError):
         msg += "\n\nTroubleshooting:\n"
         msg += "  1. Open a browser and visit https://www.xiaohongshu.com/\n"
         msg += "  2. Make sure you are logged in\n"
-        msg += "  3. Try: xhs login --cookie-source <browser>"
+        msg += "  3. Try: xhs login --cookie-source <browser>\n"
+        msg += "  4. Or start Chromium with --remote-debugging-port=9222, then run:\n"
+        msg += "     xhs --cdp-port 9222 login"
         super().__init__(msg)
