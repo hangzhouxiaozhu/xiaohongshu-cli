@@ -3,7 +3,7 @@
 import pytest
 
 from xhs_cli.command_normalizers import normalize_xhs_user_payload
-from xhs_cli.exceptions import XhsApiError
+from xhs_cli.exceptions import NeedVerifyError, XhsApiError
 from xhs_cli.qr_login import BrowserQrLoginUnavailable, _normalize_browser_cookies, qrcode_login
 
 
@@ -217,6 +217,37 @@ def test_qrcode_login_falls_back_when_browser_backend_unavailable(monkeypatch):
         "webId": "webid-http",
         "web_session": "http-session",
     }
+
+
+def test_qrcode_login_switches_to_browser_when_http_hits_captcha(monkeypatch):
+    monkeypatch.setattr(
+        "xhs_cli.qr_login._http_qrcode_login",
+        lambda **kwargs: (_ for _ in ()).throw(NeedVerifyError("slider", "verify-1")),
+    )
+    monkeypatch.setattr(
+        "xhs_cli.qr_login._browser_assisted_qrcode_login",
+        lambda **kwargs: {"a1": "browser", "webId": "browser", "web_session": "browser"},
+    )
+
+    assert qrcode_login(timeout_s=1) == {
+        "a1": "browser",
+        "webId": "browser",
+        "web_session": "browser",
+    }
+
+
+def test_qrcode_login_preserves_captcha_when_browser_was_unavailable(monkeypatch):
+    monkeypatch.setattr(
+        "xhs_cli.qr_login._browser_assisted_qrcode_login",
+        lambda **kwargs: (_ for _ in ()).throw(BrowserQrLoginUnavailable("missing")),
+    )
+    monkeypatch.setattr(
+        "xhs_cli.qr_login._http_qrcode_login",
+        lambda **kwargs: (_ for _ in ()).throw(NeedVerifyError("slider", "verify-1")),
+    )
+
+    with pytest.raises(NeedVerifyError):
+        qrcode_login(timeout_s=1, prefer_browser_assisted=True)
 
 
 def test_normalize_browser_cookies_uses_allowlist():

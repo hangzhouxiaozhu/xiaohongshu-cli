@@ -1,6 +1,7 @@
 """Unit tests for formatter (no network required)."""
 
 from xhs_cli.formatter import coerce_int, extract_note_id, format_count, parse_note_reference
+from xhs_cli.formatter_normalizers import normalize_note_detail, normalize_note_summary
 
 
 class TestFormatCount:
@@ -60,3 +61,17 @@ class TestParseNoteReference:
         assert note_id == "abc123"
         assert token == "token-1"
         assert source == "pc_search"
+
+
+def test_note_normalizers_expose_publish_time():
+    item = {
+        "id": "note-1",
+        "note_card": {
+            "title": "A",
+            "time": 1_700_000_000_000,
+            "corner_tag_info": [{"type": "publish_time", "text": "3小时前"}],
+        },
+    }
+
+    assert normalize_note_summary(item)["published_at_text"] == "3小时前"
+    assert normalize_note_detail({"items": [item]})["published_at"] == 1_700_000_000_000

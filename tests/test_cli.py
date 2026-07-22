@@ -54,6 +54,49 @@ class TestCliBasic:
         result = runner.invoke(cli, ["read", "--help"])
         assert result.exit_code == 0
 
+    def test_hydrate_returns_stable_note_and_comments(self, monkeypatch):
+        class FakeClient:
+            def get_note_detail(self, note_id, **kwargs):
+                return {
+                    "items": [{
+                        "note_card": {
+                            "title": "A",
+                            "desc": "body",
+                            "time": 1_700_000_000_000,
+                            "user": {"user_id": "u1", "nickname": "Alice"},
+                            "interact_info": {"liked_count": "3"},
+                            "tag_list": [{"name": "AI"}],
+                        }
+                    }]
+                }
+
+            def get_comments(self, note_id, **kwargs):
+                return {
+                    "comments": [{
+                        "user_info": {"nickname": "Bob"},
+                        "content": "nice",
+                        "like_count": "2",
+                    }]
+                }
+
+        class ClientContext:
+            def __enter__(self):
+                return FakeClient()
+
+            def __exit__(self, *args):
+                return False
+
+        monkeypatch.setattr("xhs_cli.commands._common.get_client", lambda ctx: ClientContext())
+
+        result = runner.invoke(cli, ["hydrate", "note-1", "--json"])
+
+        assert result.exit_code == 0
+        payload = yaml.safe_load(result.output)
+        assert payload["data"]["mode"] == "hydrate"
+        assert payload["data"]["note"]["body"] == "body"
+        assert payload["data"]["note"]["published_at"] == 1_700_000_000_000
+        assert payload["data"]["comments"][0]["content"] == "nice"
+
     def test_login_help(self):
         result = runner.invoke(cli, ["login", "--help"])
         assert result.exit_code == 0
@@ -84,7 +127,7 @@ class TestCliBasic:
             # Auth
             "login", "status", "logout", "whoami",
             # Reading
-            "search", "read", "comments", "sub-comments", "user", "user-posts",
+            "search", "read", "hydrate", "comments", "sub-comments", "user", "user-posts",
             "feed", "hot", "topics", "search-user", "my-notes",
             "notifications", "unread",
             # Interactions

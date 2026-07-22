@@ -65,6 +65,7 @@ uv sync
 # ─── Auth ─────────────────────────────────────────
 xhs login                             # Extract cookies from browser
 xhs login --qrcode                    # Browser-assisted QR login, scan in terminal
+xhs --cdp-port 9222 login             # Read cookies from a running Chromium browser via CDP
 xhs status                            # Check login status
 xhs whoami                            # Detailed profile (fans, likes, etc)
 xhs whoami --json                     # Structured JSON envelope
@@ -80,6 +81,7 @@ xhs topics "美食"                      # Search hashtags/topics
 
 # ─── Reading ──────────────────────────────────────
 xhs read 1                             # Read the 1st result from the last list command
+xhs hydrate 1 --comment-limit 5        # Stable note + top-comments payload for agents
 xhs read <note_id>                     # Read a note (API only)
 xhs read "https://www.xiaohongshu.com/explore/xxx?xsec_token=yyy"  # Read by URL (uses URL token)
 xhs comments 1                         # Read comments for the 1st result from the last list command
@@ -361,6 +363,7 @@ uv sync
 # 认证
 xhs login                             # 从浏览器提取 Cookie
 xhs login --qrcode                    # browser-assisted 二维码扫码登录（终端显示二维码）
+xhs --cdp-port 9222 login             # 通过运行中的 Chromium 调试端口读取 Cookie
 xhs status                            # 检查登录状态
 xhs whoami                            # 查看用户资料
 xhs logout                            # 清除缓存的 Cookie
@@ -373,6 +376,7 @@ xhs topics "美食"                      # 搜索话题
 
 # 阅读
 xhs read 1                             # 阅读最近一次列表里的第 1 条笔记
+xhs hydrate 1 --comment-limit 5        # Agent 稳定读取笔记正文与热门评论
 xhs read <note_id>                     # 阅读笔记（仅走 API）
 xhs read "https://...?xsec_token=..."  # 粘贴网页 URL 直接阅读（使用 URL token）
 xhs comments 1                         # 查看最近一次列表里的第 1 条笔记评论

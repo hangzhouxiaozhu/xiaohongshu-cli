@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from rich.panel import Panel
@@ -22,6 +23,18 @@ from .formatter_normalizers import (
 from .formatter_utils import coerce_int, console, format_count, print_error, print_info
 
 HOME_URL = "https://www.xiaohongshu.com"
+
+
+def _format_published_at(value: Any, fallback: str = "") -> str:
+    if value in (None, ""):
+        return fallback
+    try:
+        timestamp = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if timestamp > 10_000_000_000:
+        timestamp /= 1000
+    return datetime.fromtimestamp(timestamp).astimezone().strftime("%Y-%m-%d %H:%M")
 
 
 def _build_note_url(
@@ -106,6 +119,9 @@ def render_note(data: dict[str, Any]) -> None:
 
     table.add_row("作者", f"[bold]{nickname}[/bold]")
     table.add_row("标题", f"[bold]{title}[/bold]")
+    published_at = _format_published_at(note["published_at"], note["published_at_text"])
+    if published_at:
+        table.add_row("发布时间", published_at)
     if desc:
         display_desc = desc[:500] + "..." if len(desc) > 500 else desc
         table.add_row("正文", display_desc)
@@ -142,6 +158,7 @@ def render_search_results(data: dict[str, Any]) -> None:
     table.add_column("#", style="dim", width=3)
     table.add_column("标题", width=30)
     table.add_column("作者", width=10)
+    table.add_column("发布时间", width=16)
     table.add_column("❤️", justify="right", width=8)
     table.add_column("类型", width=4)
     table.add_column("链接", style="cyan", no_wrap=True)
@@ -154,7 +171,8 @@ def render_search_results(data: dict[str, Any]) -> None:
             source="pc_search",
             route="search_result",
         )
-        table.add_row(str(i), item["title"], item["author"], item["liked"], note_type, link)
+        published_at = _format_published_at(item["published_at"], item["published_at_text"])
+        table.add_row(str(i), item["title"], item["author"], published_at, item["liked"], note_type, link)
 
     console.print(table)
     if has_next:
@@ -175,6 +193,9 @@ def render_comments(data: dict[str, Any]) -> None:
         sub_comment_count = coerce_int(comment["sub_comment_count"])
 
         header = f"[bold]{nickname}[/bold]  [dim]❤️ {like_count}[/dim]"
+        published_at = _format_published_at(comment["published_at"])
+        if published_at:
+            header += f"  [dim]{published_at}[/dim]"
         if sub_comment_count > 0:
             header += f"  [dim]💬 {sub_comment_count} replies[/dim]"
 
@@ -194,12 +215,14 @@ def render_feed(data: dict[str, Any]) -> None:
     table.add_column("#", style="dim", width=3)
     table.add_column("标题", width=30)
     table.add_column("作者", width=10)
+    table.add_column("发布时间", width=16)
     table.add_column("❤️", justify="right", width=8)
     table.add_column("链接", style="cyan", no_wrap=True)
 
     for i, item in enumerate(items, 1):
         link = _build_note_link(item["note_id"], item.get("xsec_token", ""), source="pc_feed")
-        table.add_row(str(i), item["title"], item["author"], item["liked"], link)
+        published_at = _format_published_at(item["published_at"], item["published_at_text"])
+        table.add_row(str(i), item["title"], item["author"], published_at, item["liked"], link)
 
     console.print(table)
 
@@ -214,13 +237,15 @@ def render_user_posts(notes: list[dict[str, Any]]) -> None:
     table = Table(title="用户笔记", show_lines=True)
     table.add_column("#", style="dim", width=3)
     table.add_column("标题", width=30)
+    table.add_column("发布时间", width=16)
     table.add_column("❤️", justify="right", width=8)
     table.add_column("类型", width=4)
     table.add_column("ID", style="dim", width=24)
 
     for i, note in enumerate(normalized, 1):
         note_type = "📹" if note["note_type"] == "video" else "📷"
-        table.add_row(str(i), note["title"], note["liked"], note_type, note["note_id"])
+        published_at = _format_published_at(note["published_at"], note["published_at_text"])
+        table.add_row(str(i), note["title"], published_at, note["liked"], note_type, note["note_id"])
 
     console.print(table)
 
@@ -274,6 +299,7 @@ def render_creator_notes(data: Any) -> None:
     table = Table(title="我的笔记", show_lines=True)
     table.add_column("#", style="dim", width=3)
     table.add_column("标题", width=30)
+    table.add_column("发布时间", width=16)
     table.add_column("❤️", justify="right", width=8)
     table.add_column("💬", justify="right", width=6)
     table.add_column("状态", width=6)
@@ -281,7 +307,10 @@ def render_creator_notes(data: Any) -> None:
 
     for i, note in enumerate(notes, 1):
         status = "✅" if note["status"] in (None, 0, "published") else "⏳"
-        table.add_row(str(i), note["title"], note["liked"], note["comment_count"], status, note["note_id"])
+        published_at = _format_published_at(note["published_at"], note["published_at_text"])
+        table.add_row(
+            str(i), note["title"], published_at, note["liked"], note["comment_count"], status, note["note_id"]
+        )
 
     console.print(table)
 

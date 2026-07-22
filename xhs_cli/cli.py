@@ -94,6 +94,7 @@ cli.add_command(auth.whoami)
 
 cli.add_command(reading.search)
 cli.add_command(reading.read)
+cli.add_command(reading.hydrate)
 cli.add_command(reading.comments)
 cli.add_command(reading.sub_comments)
 cli.add_command(reading.user)

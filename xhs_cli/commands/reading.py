@@ -4,9 +4,11 @@ import click
 
 from ..command_normalizers import normalize_paged_notes
 from ..cookies import cache_note_context
+from ..exceptions import XhsApiError
 from ..formatter import (
     maybe_print_structured,
     print_info,
+    print_yaml,
     render_comments,
     render_feed,
     render_note,
@@ -15,7 +17,9 @@ from ..formatter import (
     render_user_info,
     render_user_posts,
     render_users,
+    success_payload,
 )
+from ..formatter_normalizers import normalize_comments, normalize_hydrated_note
 from ..note_refs import resolve_note_reference, save_index_from_items, save_index_from_notes
 from ._common import exit_for_error, handle_command, run_client_action, structured_output_options
 
@@ -101,6 +105,51 @@ def read(ctx, id_or_url: str, xsec_token: str, as_json: bool, as_yaml: bool):
         ctx,
         action=_read_action,
         render=render_note,
+        as_json=as_json,
+        as_yaml=as_yaml,
+    )
+
+
+@click.command()
+@click.argument("id_or_url")
+@click.option("--xsec-token", default="", help="Security token (or reuse a cached token for this note)")
+@click.option("--comment-limit", type=click.IntRange(0, 100), default=5, show_default=True)
+@structured_output_options
+@click.pass_context
+def hydrate(ctx, id_or_url: str, xsec_token: str, comment_limit: int, as_json: bool, as_yaml: bool):
+    """Fetch a note and its top comments as one stable agent payload."""
+    note_id, token, url_source = resolve_note_reference(id_or_url, xsec_token=xsec_token)
+    xsec_source = url_source or "pc_feed"
+    if token:
+        cache_note_context(note_id, token, xsec_source)
+
+    url = f"https://www.xiaohongshu.com/explore/{note_id}"
+    if token:
+        url += f"?xsec_token={token}&xsec_source={xsec_source}"
+
+    def _hydrate_action(client):
+        kwargs = {"xsec_token": token, "xsec_source": xsec_source}
+        detail = client.get_note_detail(note_id, **kwargs)
+        if not detail.get("items"):
+            raise XhsApiError(f"Note {note_id} returned no detail data")
+        comments_data = {"comments": []}
+        warnings = []
+        if comment_limit:
+            try:
+                comments_data = client.get_comments(note_id, cursor="", **kwargs)
+            except XhsApiError as exc:
+                warnings.append(f"comments_unavailable: {exc}")
+        return {
+            "mode": "hydrate",
+            "note": normalize_hydrated_note(detail, note_id=note_id, url=url),
+            "comments": normalize_comments(comments_data)[:comment_limit],
+            "warnings": warnings,
+        }
+
+    handle_command(
+        ctx,
+        action=_hydrate_action,
+        render=lambda data: print_yaml(success_payload(data)),
         as_json=as_json,
         as_yaml=as_yaml,
     )
